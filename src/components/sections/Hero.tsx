@@ -1,5 +1,6 @@
 import { ArrowRight, ShieldCheck } from "lucide-react"
 
+import { TypedName } from "@/components/TypedName"
 import { useSiteContent } from "@/content/SiteContent"
 
 export function Hero() {
@@ -22,7 +23,7 @@ export function Hero() {
             <ShieldCheck className="size-3.5" /> {person.badge}
           </span>
           <h1 className="mt-5 text-5xl leading-[1.02] font-extrabold tracking-tight sm:text-6xl lg:text-7xl">
-            {person.firstName} <span className="text-gold">{person.lastName}</span>
+            <TypedName first={person.firstName} last={person.lastName} />
           </h1>
           <p className="mt-5 max-w-md text-xl font-medium text-silver">
             {person.tagline}
