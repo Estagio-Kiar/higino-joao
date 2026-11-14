@@ -1,9 +1,10 @@
 import { ArrowUpRight } from "lucide-react"
 
 import { Reveal } from "@/components/Reveal"
-import { business } from "@/data/profile"
+import { useSiteContent } from "@/content/SiteContent"
 
 export function Business() {
+  const { business } = useSiteContent()
   return (
     <section id="negocios" data-side="none" className="bg-silver text-ink">
       <div className="mx-auto max-w-6xl px-5 py-16 md:py-24">
@@ -33,10 +34,7 @@ export function Business() {
                 delay={i * 80}
                 className="flex flex-col rounded-2xl bg-white p-6 shadow-sm ring-1 ring-ink/10 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
               >
-                <span
-                  aria-hidden
-                  className="h-1 w-10 rounded-full bg-gold"
-                />
+                <span aria-hidden className="h-1 w-10 rounded-full bg-gold" />
                 <h3 className="mt-4 text-lg font-bold">{item.title}</h3>
                 <p className="mt-2 flex-1 text-sm/6 text-ink/75">{item.text}</p>
                 <ul className="mt-4 flex flex-wrap gap-1.5">

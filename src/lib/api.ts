@@ -1,32 +1,28 @@
 import type {
   AdminUser,
   AgendaEvent,
+  AssignableRole,
   AuthResponse,
   CareerHistory,
-  GalleryPhoto,
-  Category,
-  News,
-  Post,
+  Estrategia,
+  Negocio,
   PanelUser,
   Profile,
   Skill,
   SocialLink,
-  UploadFolder,
-  UploadResponse,
-  UserRole,
 } from "@/lib/types"
 
 /** URL base da API. Defina `VITE_API_URL` no `.env` do front. */
 export const API_URL = (
-  (import.meta.env.VITE_API_URL as string | undefined) ??
-  "http://localhost:3333"
+  (import.meta.env.VITE_API_URL as string | undefined) ?? ""
 ).replace(/\/+$/, "")
 
-/** Converte caminhos devolvidos pela API (`/uploads/...`) em URLs absolutas. */
+/** Converte caminhos relativos devolvidos pela API em URLs absolutas. */
 export function assetUrl(src?: string | null) {
   if (!src) return undefined
   if (/^(https?:)?\/\//.test(src) || src.startsWith("data:")) return src
-  if (src.startsWith("/uploads/")) return `${API_URL}${src}`
+  if (src.startsWith("/profile/") || src.startsWith("/agenda/"))
+    return `${API_URL}${src}`
   return src
 }
 
@@ -46,10 +42,49 @@ export function imageVariant(src: string | null | undefined, width: number) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Conversão camelCase (API) <-> snake_case (front)                    */
+/* ------------------------------------------------------------------ */
+
+type Json = Record<string, unknown>
+
+const toSnake = (k: string) => k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
+const toCamel = (k: string) =>
+  k.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
+
+/** «ADMIN» / «ROLE_ADMIN» -> «admin». */
+export const normalizeRole = (role?: string | null) =>
+  (role ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/^role_/, "")
+
+function fromApi<T>(obj: unknown): T {
+  if (Array.isArray(obj)) return obj.map((x) => fromApi(x)) as T
+  if (!obj || typeof obj !== "object") return obj as T
+  const out: Json = {}
+  for (const [k, v] of Object.entries(obj as Json)) out[toSnake(k)] = v
+  if (typeof out.role === "string" && "email" in out)
+    out.role = normalizeRole(out.role)
+  return out as T
+}
+
+/** Campos geridos pela API que não se enviam. */
+const SERVER_FIELDS = new Set(["id", "owner_id", "created_at", "updated_at"])
+
+function toApi(obj: Json): Json {
+  const out: Json = {}
+  for (const [k, v] of Object.entries(obj)) {
+    if (SERVER_FIELDS.has(k)) continue
+    out[toCamel(k)] = v === "" ? null : v
+  }
+  return out
+}
+
+/* ------------------------------------------------------------------ */
 /* Sessão                                                              */
 /* ------------------------------------------------------------------ */
 
-const SESSION_KEY = "jn-admin-session"
+const SESSION_KEY = "hj-admin-session"
 
 export type Session = {
   token: string
@@ -89,6 +124,12 @@ export const sessionStore = {
   },
 }
 
+const toSession = (data: AuthResponse): Session => ({
+  token: data.token,
+  refresh_token: data.refresh_token,
+  user: { ...data.user, role: normalizeRole(data.user.role) },
+})
+
 /* ------------------------------------------------------------------ */
 /* Pedidos                                                             */
 /* ------------------------------------------------------------------ */
@@ -107,53 +148,39 @@ const MESSAGES: Record<number, string> = {
   403: "Não tem permissão para esta ação.",
   404: "Registo não encontrado.",
   409: "Já existe um registo com estes dados.",
-  413: "Ficheiro demasiado grande (máx. 5 MB).",
+  413: "Ficheiro demasiado grande.",
+  500: "Erro interno da API. Tente novamente mais tarde.",
+  502: "A API não conseguiu contactar um serviço externo (e-mail ou imagens).",
 }
 
-const AUTH_MESSAGES: Record<string, string> = {
-  "Credentials taken": "Já existe um utilizador com este e-mail.",
-  "Invalid Google token":
-    "A sessão Google é inválida ou expirou. Tente novamente.",
-  "Google email not verified":
-    "O e-mail desta conta Google não está verificado.",
-  "Google email does not match":
-    "A conta Google escolhida não corresponde ao seu e-mail.",
-  "Google account already linked to another user":
-    "Esta conta Google já está associada a outro utilizador.",
-  "Google account not registered":
-    "Esta conta Google não pertence a nenhum utilizador do painel.",
-  "Only active users":
-    "A sua conta ainda não está ativa. Confirme o e-mail para continuar.",
-  "Invalid or expired confirmation link":
-    "O link de confirmação é inválido ou já expirou.",
-  "Use the email confirmation code to reset your own password.":
-    "Para alterar a sua própria palavra-passe use «Esqueci-me da palavra-passe» no login.",
-  "User not found": "Utilizador não encontrado.",
-  "Agenda event not found": "Evento não encontrado.",
+/** Mensagens da API que chegam em inglês ou pouco claras. */
+const API_MESSAGES: Record<string, string> = {
+  "Bad credentials": "E-mail ou palavra-passe incorretos.",
+  "Credenciais inválidas": "E-mail ou palavra-passe incorretos.",
+  "Dont can to create other user with role ADMIN.":
+    "Não é possível criar outro administrador pelo painel.",
+  "User is disabled": "A sua conta ainda não está ativa. Confirme o e-mail.",
 }
 
 async function toError(res: Response) {
   let message = MESSAGES[res.status] ?? `Erro inesperado (${res.status}).`
   try {
-    const body = await res.json()
-    const raw = Array.isArray(body?.message)
-      ? body.message.join(" · ")
-      : body?.message
-    if (raw === "Invalid credentials")
-      message = "E-mail ou palavra-passe incorretos."
-    else if (raw === "Only manager")
-      message = "Esta ação é reservada a administradores com conta ativa."
-    else if (raw && AUTH_MESSAGES[raw]) message = AUTH_MESSAGES[raw]
-    else if (typeof raw === "string" && /can not create \d+ users/i.test(raw))
-      message = "Limite de utilizadores atingido na API."
-    else if (res.status === 400 && raw) message = `Dados inválidos: ${raw}`
-    // Mensagens que a API já escreve em português (ex.: «Código inválido ou
-    // expirado.», «Confirme seu email antes de entrar.») passam tal e qual.
-    else if (typeof raw === "string" && /[ãõçáéíóúâêô]/i.test(raw))
-      message = raw
+    // Formato da API: { timestamp, status, error, message, path, details[] }
+    const body = (await res.json()) as {
+      message?: string
+      details?: string[]
+    }
+    const raw = body?.message?.trim()
+    const details = Array.isArray(body?.details) ? body.details : []
+    if (raw && API_MESSAGES[raw]) message = API_MESSAGES[raw]
+    else if (res.status === 400 && details.length)
+      message = `Dados inválidos: ${details.join(" · ")}`
+    else if (raw && res.status !== 500) message = raw
   } catch {
     /* corpo sem JSON */
   }
+  if (res.status === 401 && message === MESSAGES[401] && !sessionStore.get())
+    message = "E-mail ou palavra-passe incorretos."
   return new ApiError(res.status, message)
 }
 
@@ -170,8 +197,7 @@ async function refreshSession(): Promise<boolean> {
         body: JSON.stringify({ refresh_token: current.refresh_token }),
       })
       if (!res.ok) throw new Error()
-      const data = (await res.json()) as AuthResponse
-      sessionStore.set(data)
+      sessionStore.set(toSession((await res.json()) as AuthResponse))
       return true
     } catch {
       sessionStore.set(null)
@@ -184,7 +210,7 @@ async function refreshSession(): Promise<boolean> {
 }
 
 type RequestOptions = {
-  method?: "GET" | "POST" | "PATCH" | "DELETE"
+  method?: "GET" | "POST" | "PUT" | "DELETE"
   body?: unknown
   auth?: boolean
   signal?: AbortSignal
@@ -195,7 +221,9 @@ export async function request<T>(
   { method = "GET", body, auth = false, signal }: RequestOptions = {},
   retry = true
 ): Promise<T> {
-  const headers: Record<string, string> = {}
+  if (!API_URL)
+    throw new ApiError(0, "A API não está configurada (defina VITE_API_URL).")
+  const headers: Record<string, string> = { Accept: "application/json" }
   const isForm = body instanceof FormData
   if (body !== undefined && !isForm)
     headers["Content-Type"] = "application/json"
@@ -225,54 +253,86 @@ export async function request<T>(
   if (!res.ok) throw await toError(res)
   if (res.status === 204) return undefined as T
   const text = await res.text()
-  return (text ? JSON.parse(text) : undefined) as T
+  return (text ? fromApi<T>(JSON.parse(text)) : undefined) as T
 }
 
-/** CRUD genérico para os recursos REST da API. */
-function resource<T, P = Partial<T>>(base: string) {
+/**
+ * CRUD de um recurso REST. A API usa PUT (substituição completa): `update`
+ * junta as alterações ao registo atual antes de enviar, para não apagar
+ * campos que o formulário não mostra.
+ */
+function resource<T extends { id: string }>(base: string) {
+  const get = (id: string) => request<T>(`${base}/${id}`)
   return {
     list: (signal?: AbortSignal) => request<T[]>(base, { signal }),
-    get: (id: string) => request<T>(`${base}/${id}`),
-    create: (data: P) =>
-      request<T>(base, { method: "POST", body: data, auth: true }),
-    update: (id: string, data: P) =>
-      request<T>(`${base}/${id}`, { method: "PATCH", body: data, auth: true }),
+    get,
+    create: (data: Partial<T>) =>
+      request<T>(base, {
+        method: "POST",
+        body: toApi(data as Json),
+        auth: true,
+      }),
+    update: async (id: string, patch: Partial<T>) => {
+      const current = await get(id)
+      return request<T>(`${base}/${id}`, {
+        method: "PUT",
+        body: toApi({ ...(current as Json), ...(patch as Json) }),
+        auth: true,
+      })
+    },
     remove: (id: string) =>
-      request<T>(`${base}/${id}`, { method: "DELETE", auth: true }),
+      request<unknown>(`${base}/${id}`, { method: "DELETE", auth: true }),
+  }
+}
+
+/** Envio de imagem associado a um registo (POST /{recurso}/{id}/upload). */
+function uploader<T>(base: string) {
+  return (id: string, file: File) => {
+    const form = new FormData()
+    form.append("file", file)
+    return request<T>(`${base}/${id}/upload`, {
+      method: "POST",
+      body: form,
+      auth: true,
+    })
   }
 }
 
 export const api = {
   auth: {
-    signIn: (email: string, password: string) =>
-      request<AuthResponse>("/auth/sing_in", {
-        method: "POST",
-        body: { email, password },
-      }),
+    signIn: async (email: string, password: string) =>
+      toSession(
+        await request<AuthResponse>("/auth/sing-in", {
+          method: "POST",
+          body: { email, password },
+        })
+      ),
+    /** Entra com o credential (id_token) do Google Identity Services. */
+    google: async (credential: string) =>
+      toSession(
+        await request<AuthResponse>("/auth/login-google", {
+          method: "POST",
+          body: { credential },
+        })
+      ),
     /**
-     * Cria um utilizador do painel. A API envia um link de confirmação por
-     * e-mail e a conta só fica ativa depois de confirmada. Se o e-mail já
-     * existir, a API apenas reenvia o link.
+     * Cria um utilizador (só administradores). A API envia um link de
+     * confirmação por e-mail; a conta fica ativa depois de o abrir.
      */
     signUp: (data: {
       nome: string
       email: string
       password: string
-      role: UserRole
+      role: AssignableRole
     }) =>
-      request<{ message: string }>("/auth/sing_up", {
+      request<{ message: string }>("/auth/sing-up", {
         method: "POST",
-        body: data,
+        body: { ...data, role: data.role.toUpperCase() },
+        auth: true,
       }),
-    /** Ativa a conta com o token recebido no link do e-mail. */
-    confirmEmail: (token: string) =>
-      request<{ message: string }>("/auth/confirm-email", {
-        method: "POST",
-        body: { token },
-      }),
-    /** Pede um código de 8 dígitos para redefinir a palavra-passe. */
+    /** Pede um código de 6 dígitos para redefinir a palavra-passe. */
     requestPasswordReset: (email: string) =>
-      request<{ message: string }>("/auth/password-reset/request", {
+      request<{ message: string }>("/auth/forgot-password", {
         method: "POST",
         body: { email },
       }),
@@ -282,51 +342,47 @@ export const api = {
       code: string
       newPassword: string
     }) =>
-      request<{ message: string }>("/auth/password-reset/confirm", {
+      request<{ message: string }>("/auth/reset-password", {
         method: "POST",
         body: data,
       }),
-    /** Entra com o id_token devolvido pelo Google Identity Services. */
-    google: (idToken: string) =>
-      request<AuthResponse>("/auth/google", {
-        method: "POST",
-        body: { id_token: idToken },
-      }),
-    /** Associa uma conta Google ao utilizador com sessão iniciada. */
-    linkGoogle: (idToken: string, email: string) =>
-      request<{ message: string }>("/auth/link-google", {
-        method: "POST",
-        body: { id_token: idToken, email },
-        auth: true,
-      }),
   },
-  profile: resource<Profile>("/profile"),
-  social: resource<SocialLink>("/social_medias"),
-  categories: resource<Category>("/categories"),
-  articles: resource<Post>("/articles"),
-  news: resource<News>("/news"),
-  career: resource<CareerHistory>("/career_history"),
+  profile: {
+    ...resource<Profile>("/profile"),
+    /** Envia a foto do Hero; a API guarda-a no Cloudinary e atualiza o perfil. */
+    upload: uploader<Profile>("/profile"),
+  },
+  social: resource<SocialLink>("/social-links"),
+  career: resource<CareerHistory>("/career-history"),
   skills: resource<Skill>("/skills"),
-  agenda: resource<AgendaEvent>("/agenda"),
-  gallery: resource<GalleryPhoto>("/gallery"),
+  agenda: {
+    ...resource<AgendaEvent>("/agenda"),
+    upload: uploader<AgendaEvent>("/agenda"),
+  },
+  negocios: resource<Negocio>("/negocio"),
+  estrategias: resource<Estrategia>("/estrategia"),
   /** Gestão de utilizadores (só administradores). */
   users: {
-    list: () => request<PanelUser[]>("/admin/users", { auth: true }),
-    setPassword: (id: string, newPassword: string) =>
-      request<{ message: string }>(`/admin/users/${id}/password`, {
-        method: "PATCH",
-        body: { newPassword },
+    list: () => request<PanelUser[]>("/users", { auth: true }),
+    me: () => request<AdminUser>("/users/me", { auth: true }),
+    /** A API substitui todos os campos (email, nome, função e estado). */
+    update: (
+      user: PanelUser,
+      patch: { role?: AssignableRole; name?: string; active?: boolean }
+    ) =>
+      request<PanelUser>(`/users/${user.id}`, {
+        method: "PUT",
+        body: {
+          email: user.email,
+          name: patch.name ?? user.name ?? user.email,
+          role: (patch.role ?? normalizeRole(user.role)).toUpperCase(),
+          // A API ainda não devolve o estado; por omissão mantém a conta ativa.
+          active: patch.active ?? user.active ?? true,
+        },
         auth: true,
       }),
-  },
-  upload(folder: UploadFolder, file: File) {
-    const form = new FormData()
-    form.append("file", file)
-    return request<UploadResponse>(`/uploads/${folder}`, {
-      method: "POST",
-      body: form,
-      auth: true,
-    })
+    remove: (id: string) =>
+      request<void>(`/users/${id}`, { method: "DELETE", auth: true }),
   },
 }
 

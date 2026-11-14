@@ -10,7 +10,7 @@ import {
 
 import { SectionLabel } from "@/components/SectionLabel"
 import { Reveal } from "@/components/Reveal"
-import { strategies } from "@/data/profile"
+import { useSiteContent } from "@/content/SiteContent"
 
 const ICONS: Record<string, LucideIcon> = {
   landmark: Landmark,
@@ -22,6 +22,7 @@ const ICONS: Record<string, LucideIcon> = {
 }
 
 export function Strategies() {
+  const { strategies } = useSiteContent()
   return (
     <section
       id="estrategias"
