@@ -190,7 +190,7 @@ export function ProfilePage() {
                 id="p-title"
                 value={v.title}
                 onChange={set("title")}
-                placeholder="CISO · Standard Bank Angola"
+                placeholder="CISO · Chief Information Security Officer"
               />
             </Field>
             <Field

@@ -16,7 +16,7 @@ export const person = {
   name: "Higino João",
   firstName: "Higino",
   lastName: "João",
-  badge: "CISO · Standard Bank Angola",
+  badge: "CISO · Chief Information Security Officer",
   tagline: "Segurança da informação ao serviço da confiança no setor financeiro",
   // PROVISÓRIO: frase de apresentação a validar.
   heroText:
