@@ -33,80 +33,96 @@ function greeting() {
 /** Copia o conteúdo estático atual do site para a API (só o que estiver vazio). */
 async function importStatic(state: ReturnType<typeof useAdminData>["state"]) {
   let created = 0
+  const failed: string[] = []
   const empty = (k: DataKey) => state[k].items.length === 0 && !state[k].error
-  if (empty("profile")) {
-    await api.profile.create({
-      title: person.badge,
-      tagline: person.tagline,
-      bio: person.heroText,
-      bio_description: about.paragraphs.join("\n\n"),
-      location: about.location,
-      experience_years: about.experienceYears,
+  // Cada secção é importada à parte: um erro numa não impede as outras.
+  const section = async (label: string, run: () => Promise<void>) => {
+    try {
+      await run()
+    } catch (e) {
+      failed.push(`${label}: ${(e as Error).message}`)
+    }
+  }
+  if (empty("profile"))
+    await section("Perfil", async () => {
+      await api.profile.create({
+        title: person.badge,
+        tagline: person.tagline,
+        bio: person.heroText,
+        bio_description: about.paragraphs.join("\n\n"),
+        location: about.location,
+        experience_years: about.experienceYears,
+      })
+      created++
     })
-    created++
-  }
-  if (empty("career")) {
-    // Criados por ordem cronológica: o site ordena o percurso por data de criação.
-    for (const j of journey) {
-      await api.career.create({
-        role: j.title,
-        company: j.company,
-        period: j.date,
-        description: j.text,
-      })
-      created++
-    }
-  }
-  if (empty("skills")) {
-    for (const name of about.skills) {
-      await api.skills.create({ name })
-      created++
-    }
-  }
-  if (empty("estrategias")) {
-    for (const [i, s] of strategies.items.entries()) {
-      await api.estrategias.create({
-        ordem: i + 1,
-        icon: s.icon,
-        titulo: s.title,
-        descricao: s.text,
-      })
-      created++
-    }
-  }
-  if (empty("negocios")) {
-    for (const b of business.items) {
-      await api.negocios.create({
-        titulo: b.title,
-        descricao: b.text,
-        tags: b.tags,
-      })
-      created++
-    }
-  }
-  if (empty("agenda")) {
-    for (const e of events) {
-      await api.agenda.create({
-        data: new Date(e.data).toISOString(),
-        evento: e.evento,
-        tipo: e.tipo,
-        descricao: e.descricao,
-        local: e.local,
-        status: e.status,
-        link: e.link,
-      })
-      created++
-    }
-  }
-  if (empty("social") && contact.linkedin) {
-    await api.social.create({
-      platform: "linkedin",
-      profile_url: contact.linkedin,
-      icon_name: "linkedin",
+  if (empty("career"))
+    await section("Percurso", async () => {
+      // Criados por ordem cronológica: o site ordena o percurso por data de criação.
+      for (const j of journey) {
+        await api.career.create({
+          role: j.title,
+          company: j.company,
+          period: j.date,
+          description: j.text,
+        })
+        created++
+      }
     })
-    created++
-  }
-  return created
+  if (empty("skills"))
+    await section("Competências", async () => {
+      for (const name of about.skills) {
+        await api.skills.create({ name })
+        created++
+      }
+    })
+  if (empty("estrategias"))
+    await section("Estratégias", async () => {
+      for (const [i, s] of strategies.items.entries()) {
+        await api.estrategias.create({
+          ordem: i + 1,
+          icon: s.icon,
+          titulo: s.title,
+          descricao: s.text,
+        })
+        created++
+      }
+    })
+  if (empty("negocios"))
+    await section("Negócios", async () => {
+      for (const b of business.items) {
+        await api.negocios.create({
+          titulo: b.title,
+          descricao: b.text,
+          tags: b.tags,
+        })
+        created++
+      }
+    })
+  if (empty("agenda"))
+    await section("Eventos", async () => {
+      for (const e of events) {
+        await api.agenda.create({
+          data: new Date(e.data).toISOString(),
+          evento: e.evento,
+          tipo: e.tipo,
+          descricao: e.descricao,
+          local: e.local,
+          status: e.status,
+          link: e.link,
+        })
+        created++
+      }
+    })
+  if (empty("social") && contact.linkedin)
+    await section("Redes", async () => {
+      await api.social.create({
+        platform: "linkedin",
+        profile_url: contact.linkedin,
+        icon_name: "linkedin",
+      })
+      created++
+    })
+  return { created, failed }
 }
 
 export function Dashboard() {
@@ -153,8 +169,13 @@ export function Dashboard() {
   const runImport = async () => {
     setImporting(true)
     try {
-      const n = await importStatic(state)
-      toast.success(`${n} registo(s) importado(s) do site.`)
+      const { created, failed } = await importStatic(state)
+      if (failed.length === 0)
+        toast.success(`${created} registo(s) importado(s) do site.`)
+      else
+        toast.error(
+          `${created} registo(s) importado(s). Falharam: ${failed.join(" · ")}`
+        )
       await reload()
     } catch (e) {
       toast.error((e as Error).message)
