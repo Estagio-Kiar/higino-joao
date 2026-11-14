@@ -52,6 +52,12 @@
     --color-gold: var(--gold);
     --color-gold-deep: var(--gold-deep);
     --color-silver: var(--silver);
+    /* Cores do painel /admin (mesmo desenho do painel da Jaqueline Ngulo,
+       com a paleta da marca HJ): ação em dourado escuro (contraste AA com
+       texto branco), destaque dourado e tom creme para fundos suaves. */
+    --color-lip: #86651f;
+    --color-caramel: #d8b061;
+    --color-lavender: #eadfc7;
     --color-stone: var(--stone);
     --color-ring: var(--ring);
     --color-input: var(--input);
@@ -351,5 +357,68 @@ html {
 @media (prefers-reduced-motion: reduce) {
   .typed-caret {
     display: none;
+  }
+}
+
+/* Painel /admin: fundo claro e texto escuro (o site é escuro) */
+html.admin-mode body {
+  background: #f4f4f6;
+  color: var(--ink);
+}
+html.admin-mode {
+  scrollbar-color: auto;
+}
+
+/*
+ * Barras de scroll do painel /admin (classe aplicada ao <html> pelo AdminApp).
+ * Chrome/Edge/Safari usam ::-webkit-scrollbar; o Firefox usa scrollbar-color.
+ */
+html.admin-mode ::-webkit-scrollbar,
+html.admin-mode::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+html.admin-mode ::-webkit-scrollbar-track,
+html.admin-mode::-webkit-scrollbar-track {
+  background: transparent;
+}
+html.admin-mode ::-webkit-scrollbar-thumb,
+html.admin-mode::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: rgb(18 24 27 / 0.22);
+  transition: background-color 0.2s ease;
+}
+html.admin-mode ::-webkit-scrollbar-thumb:hover,
+html.admin-mode::-webkit-scrollbar-thumb:hover {
+  background-color: #86651f;
+}
+html.admin-mode ::-webkit-scrollbar-thumb:active,
+html.admin-mode::-webkit-scrollbar-thumb:active {
+  background-color: #6b5018;
+}
+html.admin-mode ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+/* Página do painel: calha clara para destacar o polegar */
+html.admin-mode::-webkit-scrollbar-track {
+  background: #e9e9ec;
+}
+/* Áreas escuras (barra lateral): polegar claro */
+html.admin-mode .scroll-dark::-webkit-scrollbar-thumb {
+  background-color: rgb(255 255 255 / 0.16);
+}
+html.admin-mode .scroll-dark::-webkit-scrollbar-thumb:hover {
+  background-color: #86651f;
+}
+@supports not selector(::-webkit-scrollbar) {
+  html.admin-mode,
+  html.admin-mode * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(18 24 27 / 0.28) transparent;
+  }
+  html.admin-mode .scroll-dark {
+    scrollbar-color: rgb(255 255 255 / 0.2) transparent;
   }
 }

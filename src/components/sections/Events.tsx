@@ -46,16 +46,14 @@ function EventCard({ event, past }: { event: AgendaEvent; past?: boolean }) {
   const image = assetUrl(event.imagem)
   return (
     <a
-      href={event.link}
+      href={event.link ?? undefined}
       target="_blank"
       rel="noopener noreferrer"
-      className={`group flex h-full overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-md hover:border-gold/50 transition-all duration-500 hover:-translate-y-1 hover:shadow-2xl ${past ? "opacity-75 hover:opacity-100" : ""}`}
+      className={`group flex h-full overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-md transition-all duration-500 hover:-translate-y-1 hover:border-gold/50 hover:shadow-2xl ${past ? "opacity-75 hover:opacity-100" : ""}`}
     >
       {/* Data em destaque */}
       <div className="flex w-24 shrink-0 flex-col items-center justify-center gap-0.5 bg-gold px-3 py-6 text-ink sm:w-28">
-        <span className="text-4xl leading-none font-extrabold">
-          {d.day}
-        </span>
+        <span className="text-4xl leading-none font-extrabold">{d.day}</span>
         <span className="font-mono text-xs font-bold tracking-[0.2em]">
           {d.month}
         </span>
@@ -80,9 +78,7 @@ function EventCard({ event, past }: { event: AgendaEvent; past?: boolean }) {
         <p className="flex items-center gap-1.5 text-sm text-silver/80">
           <MapPin className="size-4 shrink-0" /> {event.local}
         </p>
-        <p className="line-clamp-3 text-sm/6 text-stone">
-          {event.descricao}
-        </p>
+        <p className="line-clamp-3 text-sm/6 text-stone">{event.descricao}</p>
         <span className="mt-auto inline-flex items-center gap-1 pt-1 text-sm text-gold transition-all group-hover:gap-2">
           Saber mais <ArrowUpRight className="size-4" />
         </span>
@@ -118,7 +114,11 @@ export function Events() {
     .slice(0, upcoming.length ? 2 : 4)
 
   return (
-    <section id="eventos" data-side="none" className="border-t border-border bg-ink">
+    <section
+      id="eventos"
+      data-side="none"
+      className="border-t border-border bg-ink"
+    >
       <div className="mx-auto max-w-6xl px-5 py-16 md:py-24">
         <Reveal className="flex items-end justify-between gap-6">
           <div>

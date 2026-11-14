@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { lazy, Suspense, useEffect } from "react"
 
 import { ScrollCompanion } from "@/components/ScrollCompanion"
 import { Footer } from "@/components/layout/Footer"
@@ -13,11 +13,15 @@ import { Pillars } from "@/components/sections/Pillars"
 import { Stats } from "@/components/sections/Stats"
 import { Strategies } from "@/components/sections/Strategies"
 import { SiteContentProvider } from "@/content/SiteContent"
+import { usePathname } from "@/lib/router"
+
+// O painel só é descarregado quando se visita /admin.
+const AdminApp = lazy(() => import("@/admin/AdminApp"))
 
 /*
- * O painel /admin (como no portfólio da Jaqueline Ngulo) será acrescentado
- * quando existir a API do Higino João. O conteúdo vem de `data/profile.ts`
- * e, com VITE_API_URL definido, da API.
+ * Site público: o conteúdo vem da API (VITE_API_URL), com `data/profile.ts`
+ * como reserva. O painel de gestão está em /admin (mesmo desenho do painel
+ * do portfólio de Jaqueline Ngulo).
  */
 function Home() {
   // Ao chegar com "/#secção", desloca até à secção.
@@ -50,6 +54,22 @@ function Home() {
 }
 
 export function App() {
+  const path = usePathname()
+
+  if (path === "/admin" || path.startsWith("/admin/")) {
+    return (
+      <Suspense
+        fallback={
+          <div className="grid min-h-svh place-items-center bg-ink">
+            <span className="size-8 animate-spin rounded-full border-2 border-caramel border-t-transparent" />
+          </div>
+        }
+      >
+        <AdminApp />
+      </Suspense>
+    )
+  }
+
   return (
     <SiteContentProvider>
       <Header />
